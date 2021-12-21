@@ -1,4 +1,5 @@
 import sys
+import shutil
 from rectpack import newPacker
 from configparser import ConfigParser
 from pathlib import Path
@@ -12,7 +13,7 @@ def main() -> int:
         plateconfig.read('.plateconfig')
         plate_size_x = float(plateconfig['plate']['size_x'])
         plate_size_y = float(plateconfig['plate']['size_y'])
-        spacing = plateconfig.get('objects', 'spacing', fallback=0)
+        spacing = float(plateconfig.get('plate', 'spacing', fallback=8))
     except KeyError:
         print("""autoplater: missing .plateconfig
         Please create a .plateconfig file in the root of your project with:
@@ -26,17 +27,20 @@ def main() -> int:
         """)
         return 1
 
-    autoplate_ini.read('out/autoplate.ini')
-    print('autoplater: fitting {} objects into {}x{} plates'
-          .format(len(autoplate_ini.sections()), plate_size_x, plate_size_y))
+    autoplate_ini.read('out/.autoplate.ini')
+    print('autoplater: fitting {} objects with {}mm spacing into {}mmx{}mm plates'
+          .format(len(autoplate_ini.sections()), spacing, plate_size_x, plate_size_y))
 
     packer.add_bin(plate_size_x, plate_size_y, count=float('inf'))
 
     for stl in autoplate_ini.sections():
         stl_data = autoplate_ini[stl]
-        packer.add_rect(float(stl_data['size_x']), float(stl_data['size_y']), stl)
+        packer.add_rect(float(stl_data['size_x']) + spacing, float(stl_data['size_y']) + spacing, stl)
 
     packer.pack()
+    if(Path('out/autoplater').exists()):
+        shutil.rmtree('out/autoplater', ignore_errors=True);
+
     for (b, x, y, w, h, rid) in packer.rect_list():
         plate_path = Path('out/autoplater/plate{}'.format(b))
         stl_path = Path(rid).resolve(strict=True)
@@ -47,7 +51,7 @@ def main() -> int:
         out_path.unlink(missing_ok=True)
         out_path.symlink_to(stl_path)
 
-    print ('autoplater: created {} {}x{} plates'
+    print ('autoplater: created {} {}mmx{}mm plates'
            .format(len(packer), plate_size_x, plate_size_y))
 
     return 0
